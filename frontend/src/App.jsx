@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
+import LandingPage from './components/LandingPage';
 import { BellRing, X } from 'lucide-react';
 
 const BACKEND_URL = 'http://127.0.0.1:8000';
@@ -14,6 +15,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState([]);
   const [seenNotificationIds, setSeenNotificationIds] = useState(new Set());
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     // Initial verification of stored tokens
@@ -118,7 +120,7 @@ export default function App() {
   const authHeader = { Authorization: `Bearer ${token}` };
 
   return (
-    <div className="app-container">
+    <div className="app-container" style={{ display: token ? 'flex' : 'block' }}>
       {token ? (
         <Dashboard
           username={username}
@@ -127,8 +129,14 @@ export default function App() {
           backendUrl={BACKEND_URL}
           authHeader={authHeader}
         />
+      ) : showAuth ? (
+        <Auth 
+          onLoginSuccess={handleLoginSuccess} 
+          backendUrl={BACKEND_URL} 
+          onBackToLanding={() => setShowAuth(false)}
+        />
       ) : (
-        <Auth onLoginSuccess={handleLoginSuccess} backendUrl={BACKEND_URL} />
+        <LandingPage onGetStarted={() => setShowAuth(true)} />
       )}
 
       {/* Floating Toast notification system */}

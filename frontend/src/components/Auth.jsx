@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { LogIn, UserPlus, Mail, Lock, User as UserIcon, GraduationCap, School, BookOpen, UserCheck } from 'lucide-react';
+import { LogIn, UserPlus, Mail, Lock, User as UserIcon, GraduationCap, School, BookOpen, UserCheck, ArrowLeft } from 'lucide-react';
 
-export default function Auth({ onLoginSuccess, backendUrl }) {
+export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -89,7 +89,10 @@ export default function Auth({ onLoginSuccess, backendUrl }) {
   return (
     <div className="auth-wrapper">
       <div className="auth-card glass-panel" style={{ maxWidth: isLogin ? '450px' : '650px' }}>
-        <div className="auth-header">
+        <button type="button" className="btn-back-home" onClick={onBackToLanding}>
+          <ArrowLeft size={16} /> Retour à l'accueil
+        </button>
+        <div className="auth-header" style={{ marginTop: '20px' }}>
           <h1>🎓 ReminderBot</h1>
           <p>{isLogin ? 'Connectez-vous à votre espace étudiant ou admin' : 'Inscrivez-vous pour créer votre compte étudiant'}</p>
         </div>
