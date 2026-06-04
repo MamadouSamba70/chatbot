@@ -31,6 +31,39 @@ import {
   Phone
 } from 'lucide-react';
 
+const DEPARTMENTS_BY_FACULTY = {
+  "La Faculté des Sciences et Techniques de la Santé (FSTS)": [
+    "Département de Médecine",
+    "Département de Pharmacie",
+    "Département d'Odontostomatologie",
+    "Département des Sciences Fondamentales et Hospitalières"
+  ],
+  "La Faculté des Sciences": [
+    "Département de Biologie",
+    "Département de Chimie",
+    "Département de Mathématiques",
+    "Département de Physique"
+  ],
+  "L'Institut Polytechnique de Conakry (IPC)": [
+    "Département de Génie Civil",
+    "Département de Génie Électrique",
+    "Département de Génie Mécanique",
+    "Département de Génie Chimique / Génie des Procédés",
+    "Département d'Informatique",
+    "Département des Télécommunications",
+    "Département de Génie Industriel et Maintenance"
+  ],
+  "L'Institut des Chemins de Fer": [
+    "Département de Gestion et Logistique des Transports Ferroviaires",
+    "Département de Maintenance du Matériel Roulant"
+  ],
+  "Le Centre Informatique": [
+    "Département des Technologies de l'Information et Développement Web",
+    "NTIC",
+    "DL"
+  ]
+};
+
 export default function Dashboard({ username, isStaff, onLogout, backendUrl, authHeader }) {
   const [events, setEvents] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -1607,34 +1640,60 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
 
                 <div className="form-group">
                   <label className="form-label">Faculté</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><GraduationCap size={18} /></span>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="Ex: FDS" 
-                      value={studentFormData.faculte}
-                      onChange={(e) => setStudentFormData({ ...studentFormData, faculte: e.target.value })}
-                      required 
-                    />
-                  </div>
+                  <select 
+                    className="form-input" 
+                    style={{ paddingLeft: '16px' }}
+                    value={studentFormData.faculte}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, faculte: e.target.value, departement: '' })}
+                    required
+                  >
+                    <option value="">Sélectionnez la faculté</option>
+                    <option value="La Faculté des Sciences et Techniques de la Santé (FSTS)">La Faculté des Sciences et Techniques de la Santé (FSTS)</option>
+                    <option value="La Faculté des Sciences">La Faculté des Sciences</option>
+                    <option value="L'Institut Polytechnique de Conakry (IPC)">L'Institut Polytechnique de Conakry (IPC)</option>
+                    <option value="L'Institut des Chemins de Fer">L'Institut des Chemins de Fer</option>
+                    <option value="Le Centre Informatique">Le Centre Informatique</option>
+                  </select>
                 </div>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Département</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><BookOpen size={18} /></span>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="Ex: Informatique" 
-                      value={studentFormData.departement}
-                      onChange={(e) => setStudentFormData({ ...studentFormData, departement: e.target.value })}
-                      required 
-                    />
-                  </div>
+                  <select 
+                    className="form-input" 
+                    style={{ paddingLeft: '16px' }}
+                    value={studentFormData.departement}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      let updatedFaculte = studentFormData.faculte;
+                      if (val && !studentFormData.faculte) {
+                        const foundFaculty = Object.keys(DEPARTMENTS_BY_FACULTY).find(key => 
+                          DEPARTMENTS_BY_FACULTY[key].includes(val)
+                        );
+                        if (foundFaculty) {
+                          updatedFaculte = foundFaculty;
+                        }
+                      }
+                      setStudentFormData({ ...studentFormData, departement: val, faculte: updatedFaculte });
+                    }} 
+                    required
+                  >
+                    <option value="">Sélectionnez le département</option>
+                    {studentFormData.faculte ? (
+                      DEPARTMENTS_BY_FACULTY[studentFormData.faculte]?.map((dept, idx) => (
+                        <option key={idx} value={dept}>{dept}</option>
+                      ))
+                    ) : (
+                      Object.entries(DEPARTMENTS_BY_FACULTY).map(([facName, depts]) => (
+                        <optgroup key={facName} label={facName}>
+                          {depts.map((dept, idx) => (
+                            <option key={idx} value={dept}>{dept}</option>
+                          ))}
+                        </optgroup>
+                      ))
+                    )}
+                  </select>
                 </div>
 
                 <div className="form-group">
