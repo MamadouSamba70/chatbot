@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import ugancLogo from '../assets/uganc_logo.png';
 import { 
   Calendar, 
   Clock, 
@@ -410,30 +411,30 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       {/* Sidebar Left: Navigation */}
       <aside className="sidebar-left">
         <div className="sidebar-logo">
-          <CalendarDays className="sidebar-logo-icon" />
-          <h2>ReminderBot</h2>
+          <img src={ugancLogo} alt="Logo UGANC" className="sidebar-logo-img" />
+          <h2 className="serif-title" style={{ fontSize: '1.25rem', letterSpacing: '0.5px' }}>ReminderBot</h2>
         </div>
         
         <div className="user-profile-badge">
-          <div className="user-avatar" style={{ background: isStaff ? 'rgba(99, 102, 241, 0.2)' : 'rgba(236, 72, 153, 0.2)', color: isStaff ? 'var(--color-accent)' : 'var(--color-examen)' }}>
+          <div className="user-avatar" style={{ background: isStaff ? 'rgba(197, 168, 128, 0.15)' : 'rgba(214, 90, 98, 0.15)', color: isStaff ? 'var(--color-accent)' : 'var(--color-examen)' }}>
             {isStaff ? 'AD' : username.charAt(0).toUpperCase()}
           </div>
           <div className="user-info">
             <span className="user-name">{username}</span>
-            <span className="user-role">{isStaff ? 'Administrateur' : 'Étudiant'}</span>
+            <span className="user-role">{isStaff ? 'Administration' : 'Étudiant'}</span>
           </div>
         </div>
 
         <ul className="nav-menu">
           <li className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => { setActiveTab('dashboard'); setSelectedStudentId(null); }}>
             <Layers className="nav-icon" />
-            <span>{isStaff ? 'Statistiques' : 'Mon Espace'}</span>
+            <span>{isStaff ? 'Vue d\'ensemble' : 'Mon Espace'}</span>
           </li>
           
           {isStaff && (
             <li className={`nav-item ${activeTab === 'students' ? 'active' : ''}`} onClick={() => setActiveTab('students')}>
               <Users className="nav-icon" />
-              <span>Gestion Étudiants</span>
+              <span>Fiches Étudiants</span>
             </li>
           )}
           
@@ -444,14 +445,14 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
 
           <li className={`nav-item ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
             <Bell className="nav-icon" />
-            <span>{isStaff ? 'Alertes Système' : 'Mes Alertes'}</span>
+            <span>{isStaff ? 'Alertes Scolarité' : 'Mes Alertes'}</span>
           </li>
 
           {/* Chatbot Tab for Students in Left Sidebar */}
           {!isStaff && (
             <li className={`nav-item ${activeTab === 'chatbot' ? 'active' : ''}`} onClick={() => setActiveTab('chatbot')}>
               <MessageSquare className="nav-icon" />
-              <span>ScolarBot AI</span>
+              <span>Assistant ScolarBot</span>
             </li>
           )}
         </ul>
@@ -466,15 +467,15 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       <main className="main-content" style={{ gridColumn: isStaff ? 'span 2' : 'span 1' }}>
         <header className="main-header">
           <div>
-            <h1>
-              {activeTab === 'chatbot' ? 'Assistant ScolarBot AI' : isStaff ? 'Espace Administrateur' : 'Tableau de bord académique'}
+            <h1 className="serif-title">
+              {activeTab === 'chatbot' ? 'Assistant ScolarBot' : isStaff ? 'Espace Administration' : 'Portail Académique Personnel'}
             </h1>
-            <p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
               {activeTab === 'chatbot' 
-                ? 'Posez vos questions académiques en direct et gérez vos alertes de scolarité.'
+                ? 'Consultez le conseiller virtuel pour vos dates d\'examens, de cours et d\'inscriptions.'
                 : isStaff 
-                ? "Panneau de supervision. Suivez les étudiants et organisez les échéances de la faculté."
-                : `Bonjour ${username}, gérez vos échéances et restez notifié en temps réel.`}
+                ? "Panneau de gestion du Centre Informatique. Supervision des comptes étudiants et planification des échéances."
+                : `Bonjour ${username}, retrouvez vos échéances officielles de scolarité et vos notifications.`}
             </p>
           </div>
           
@@ -556,7 +557,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                 {/* Recent Events */}
                 <div className="glass-panel" style={{ padding: '24px' }}>
                   <div className="card-header">
-                    <h2>{isStaff ? 'Échéances Récentes' : 'Mes Prochaines Échéances'}</h2>
+                    <h2 className="serif-title">{isStaff ? 'Échéances Récentes' : 'Mes Prochaines Échéances'}</h2>
                     <button className="btn-tab-action" onClick={() => setActiveTab('events')}>
                       Voir tout
                     </button>
@@ -598,7 +599,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                 {!isStaff && (
                   <div className="glass-panel calendar-panel" style={{ padding: '24px' }}>
                     <div className="card-header">
-                      <h2>Frise Chronologique</h2>
+                      <h2 className="serif-title">Frise Chronologique</h2>
                     </div>
                     {events.length === 0 ? (
                       <div className="empty-state">
@@ -627,7 +628,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
               {isStaff ? (
                 <div className="glass-panel calendar-panel" style={{ padding: '24px' }}>
                   <div className="card-header">
-                    <h2>Frise Chronologique</h2>
+                    <h2 className="serif-title">Frise Chronologique</h2>
                   </div>
                   {events.length === 0 ? (
                     <div className="empty-state">
@@ -657,7 +658,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <Bot size={22} style={{ color: 'var(--color-accent)' }} />
                       <div>
-                        <h2 style={{ fontSize: '1.1rem', margin: 0 }}>Assistant ScolarBot</h2>
+                        <h2 className="serif-title" style={{ fontSize: '1.1rem', margin: 0 }}>Assistant ScolarBot</h2>
                         <span style={{ fontSize: '0.72rem', color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                           <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }}></span>
                           En ligne
@@ -708,7 +709,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
         {isStaff && activeTab === 'students' && (
           <div className="glass-panel" style={{ padding: '24px' }}>
             <div className="card-header">
-              <h2>Comptes Étudiants enregistrés</h2>
+              <h2 className="serif-title">Comptes Étudiants enregistrés</h2>
               <button className="btn-primary btn-add" onClick={handleOpenAddStudentModal} style={{ width: 'auto' }}>
                 <Plus size={18} />
                 Créer un Étudiant
@@ -771,7 +772,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
         {activeTab === 'events' && (
           <div className="glass-panel" style={{ padding: '24px' }}>
             <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2>Liste des Échéances</h2>
+              <h2 className="serif-title">Liste des Échéances</h2>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <select 
                   className="form-input" 
@@ -844,7 +845,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
         {activeTab === 'notifications' && (
           <div className="glass-panel" style={{ padding: '24px' }}>
             <div className="card-header">
-              <h2>Historique des Rappels et Notifications</h2>
+              <h2 className="serif-title">Historique des Rappels et Notifications</h2>
             </div>
             {notifications.length === 0 ? (
               <div className="empty-state">
@@ -892,7 +893,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
             <div className="card-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '14px', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ 
-                  background: 'rgba(99, 102, 241, 0.15)', 
+                  background: 'rgba(197, 168, 128, 0.15)', 
                   width: '44px', 
                   height: '44px', 
                   borderRadius: '12px', 
@@ -904,7 +905,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                   <Bot size={26} />
                 </div>
                 <div>
-                  <h2 style={{ fontSize: '1.25rem', margin: 0 }}>ScolarBot AI</h2>
+                  <h2 className="serif-title" style={{ fontSize: '1.25rem', margin: 0 }}>ScolarBot</h2>
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px' }}>
                     <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block', boxShadow: '0 0 6px var(--color-success)' }}></span>
                     Opérationnel (En ligne)

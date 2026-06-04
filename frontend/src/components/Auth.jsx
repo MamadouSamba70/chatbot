@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { LogIn, UserPlus, Mail, Lock, User as UserIcon, GraduationCap, School, BookOpen, UserCheck, ArrowLeft } from 'lucide-react';
+import ugancLogo from '../assets/uganc_logo.png';
+import centreLogo from '../assets/centre_informatique_logo.png';
+import ugancHero from '../assets/uganc_hero.png';
 
 export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -88,223 +91,248 @@ export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
 
   return (
     <div className="auth-wrapper">
-      <div className="auth-card glass-panel" style={{ maxWidth: isLogin ? '450px' : '650px' }}>
-        <button type="button" className="btn-back-home" onClick={onBackToLanding}>
-          <ArrowLeft size={16} /> Retour à l'accueil
-        </button>
-        <div className="auth-header" style={{ marginTop: '20px' }}>
-          <h1>🎓 ReminderBot</h1>
-          <p>{isLogin ? 'Connectez-vous à votre espace étudiant ou admin' : 'Inscrivez-vous pour créer votre compte étudiant'}</p>
+      {/* Left panel: Heritage UGANC */}
+      <div className="auth-heritage-panel">
+        <img src={ugancHero} alt="Fresque UGANC" className="auth-heritage-bg" />
+        <div className="auth-heritage-overlay"></div>
+        <div className="auth-heritage-content">
+          <div className="auth-heritage-tag">Université Gamal Abdel Nasser</div>
+          <h2 className="auth-heritage-title">
+            Bâtir l'avenir par la <span className="serif-italic">science</span> et le <span className="serif-italic">savoir</span>
+          </h2>
+          <p className="auth-heritage-quote">
+            "Le portail d'organisation académique intelligent conçu pour accompagner votre réussite au quotidien."
+          </p>
+          <div className="auth-heritage-footer">
+            Centre Informatique UGANC &copy; 2026
+          </div>
         </div>
+      </div>
 
-        {error && (
-          <div style={{ padding: '12px', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '8px', color: '#f87171', fontSize: '0.88rem', marginBottom: '20px' }}>
-            ⚠️ {error}
+      {/* Right panel: Connection Form */}
+      <div className="auth-form-panel">
+        <div className="auth-card glass-panel" style={{ maxWidth: isLogin ? '480px' : '600px' }}>
+          <button type="button" className="btn-back-home" onClick={onBackToLanding}>
+            <ArrowLeft size={16} /> Retour à l'accueil
+          </button>
+          <div className="auth-header" style={{ marginTop: '20px' }}>
+            <div className="auth-logos-container">
+              <img src={ugancLogo} alt="Logo UGANC" className="auth-uganc-logo" />
+              <img src={centreLogo} alt="Logo Centre Informatique" className="auth-centre-logo" />
+            </div>
+            <h1>ReminderBot</h1>
+            <p>{isLogin ? 'Connectez-vous à votre espace étudiant ou admin' : 'Inscrivez-vous pour créer votre compte étudiant'}</p>
           </div>
-        )}
-        {successMsg && (
-          <div style={{ padding: '12px', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', borderRadius: '8px', color: '#34d399', fontSize: '0.88rem', marginBottom: '20px' }}>
-            ✅ {successMsg}
-          </div>
-        )}
 
-        <form onSubmit={handleSubmit}>
-          {isLogin ? (
-            /* Login Form */
-            <>
-              <div className="form-group">
-                <label className="form-label">Identifiant / Matricule</label>
-                <div className="input-wrapper">
-                  <span className="input-icon"><UserIcon size={18} /></span>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="Ex: admin ou votre Matricule" 
-                    value={loginMatricule} 
-                    onChange={e => setLoginMatricule(e.target.value)} 
-                    required 
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Mot de passe</label>
-                <div className="input-wrapper">
-                  <span className="input-icon"><Lock size={18} /></span>
-                  <input 
-                    type="password" 
-                    className="form-input" 
-                    placeholder="••••••••" 
-                    value={loginPassword} 
-                    onChange={e => setLoginPassword(e.target.value)} 
-                    required 
-                  />
-                </div>
-              </div>
-            </>
-          ) : (
-            /* Registration Form with fields grouped into two columns */
-            <>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Nom</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><UserIcon size={18} /></span>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="DIALLO" 
-                      value={nom} 
-                      onChange={e => setNom(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Prénom</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><UserIcon size={18} /></span>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="Mamadou Samba" 
-                      value={prenom} 
-                      onChange={e => setPrenom(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">N° Matricule</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><UserCheck size={18} /></span>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="Ex: 24E567" 
-                      value={matricule} 
-                      onChange={e => setMatricule(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Sexe</label>
-                  <select 
-                    className="form-input" 
-                    style={{ paddingLeft: '16px' }}
-                    value={sexe} 
-                    onChange={e => setSexe(e.target.value)}
-                  >
-                    <option value="M">Masculin</option>
-                    <option value="F">Féminin</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Université</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><School size={18} /></span>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="Ex: Université de Conakry" 
-                      value={universite} 
-                      onChange={e => setUniversite(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Faculté</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><GraduationCap size={18} /></span>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="Ex: Faculté des Sciences" 
-                      value={faculte} 
-                      onChange={e => setFaculte(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Département</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><BookOpen size={18} /></span>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="Ex: Informatique" 
-                      value={departement} 
-                      onChange={e => setDepartement(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Adresse E-mail</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><Mail size={18} /></span>
-                    <input 
-                      type="email" 
-                      className="form-input" 
-                      placeholder="Ex: mamadou@example.com" 
-                      value={email} 
-                      onChange={e => setEmail(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Mot de passe</label>
-                <div className="input-wrapper">
-                  <span className="input-icon"><Lock size={18} /></span>
-                  <input 
-                    type="password" 
-                    className="form-input" 
-                    placeholder="Définissez un mot de passe sécurisé" 
-                    value={password} 
-                    onChange={e => setPassword(e.target.value)} 
-                    required 
-                  />
-                </div>
-              </div>
-            </>
+          {error && (
+            <div style={{ padding: '12px', background: 'rgba(214,90,98,0.12)', border: '1px solid rgba(214,90,98,0.35)', borderRadius: '8px', color: '#f87171', fontSize: '0.88rem', marginBottom: '20px' }}>
+              ⚠️ {error}
+            </div>
+          )}
+          {successMsg && (
+            <div style={{ padding: '12px', background: 'rgba(63,159,127,0.12)', border: '1px solid rgba(63,159,127,0.35)', borderRadius: '8px', color: '#34d399', fontSize: '0.88rem', marginBottom: '20px' }}>
+              ✅ {successMsg}
+            </div>
           )}
 
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? <span className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></span>
-              : isLogin ? <><LogIn size={18} /> Se connecter</> : <><UserPlus size={18} /> S'inscrire</>}
-          </button>
-        </form>
+          <form onSubmit={handleSubmit}>
+            {isLogin ? (
+              /* Login Form */
+              <>
+                <div className="form-group">
+                  <label className="form-label">Identifiant / Matricule</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon"><UserIcon size={18} /></span>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="Ex: admin ou votre Matricule" 
+                      value={loginMatricule} 
+                      onChange={e => setLoginMatricule(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                </div>
 
-        {isLogin && (
-          <div style={{ marginTop: '16px', padding: '10px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-            👑 Admin : <strong style={{ color: 'var(--text-secondary)' }}>admin</strong> / <strong style={{ color: 'var(--text-secondary)' }}>adminpassword</strong>
+                <div className="form-group">
+                  <label className="form-label">Mot de passe</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon"><Lock size={18} /></span>
+                    <input 
+                      type="password" 
+                      className="form-input" 
+                      placeholder="••••••••" 
+                      value={loginPassword} 
+                      onChange={e => setLoginPassword(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* Registration Form with fields grouped into two columns */
+              <>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Nom</label>
+                    <div className="input-wrapper">
+                      <span className="input-icon"><UserIcon size={18} /></span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="DIALLO" 
+                        value={nom} 
+                        onChange={e => setNom(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Prénom</label>
+                    <div className="input-wrapper">
+                      <span className="input-icon"><UserIcon size={18} /></span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Mamadou Samba" 
+                        value={prenom} 
+                        onChange={e => setPrenom(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">N° Matricule</label>
+                    <div className="input-wrapper">
+                      <span className="input-icon"><UserCheck size={18} /></span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Ex: 24E567" 
+                        value={matricule} 
+                        onChange={e => setMatricule(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Sexe</label>
+                    <select 
+                      className="form-input" 
+                      style={{ paddingLeft: '16px' }}
+                      value={sexe} 
+                      onChange={e => setSexe(e.target.value)}
+                    >
+                      <option value="M">Masculin</option>
+                      <option value="F">Féminin</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Université</label>
+                    <div className="input-wrapper">
+                      <span className="input-icon"><School size={18} /></span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Ex: Université de Conakry" 
+                        value={universite} 
+                        onChange={e => setUniversite(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Faculté</label>
+                    <div className="input-wrapper">
+                      <span className="input-icon"><GraduationCap size={18} /></span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Ex: Faculté des Sciences" 
+                        value={faculte} 
+                        onChange={e => setFaculte(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Département</label>
+                    <div className="input-wrapper">
+                      <span className="input-icon"><BookOpen size={18} /></span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Ex: Informatique" 
+                        value={departement} 
+                        onChange={e => setDepartement(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Adresse E-mail</label>
+                    <div className="input-wrapper">
+                      <span className="input-icon"><Mail size={18} /></span>
+                      <input 
+                        type="email" 
+                        className="form-input" 
+                        placeholder="Ex: mamadou@example.com" 
+                        value={email} 
+                        onChange={e => setEmail(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Mot de passe</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon"><Lock size={18} /></span>
+                    <input 
+                      type="password" 
+                      className="form-input" 
+                      placeholder="Définissez un mot de passe sécurisé" 
+                      value={password} 
+                      onChange={e => setPassword(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? <span className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></span>
+                : isLogin ? <><LogIn size={18} /> Se connecter</> : <><UserPlus size={18} /> S'inscrire</>}
+            </button>
+          </form>
+
+          {isLogin && (
+            <div style={{ marginTop: '16px', padding: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+              Accès administration pour évaluation : <strong style={{ color: 'var(--text-secondary)' }}>admin</strong> / <strong style={{ color: 'var(--text-secondary)' }}>adminpassword</strong>
+            </div>
+          )}
+
+          <div className="auth-toggle">
+            {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}
+            <button type="button" className="auth-toggle-btn" onClick={() => { setIsLogin(!isLogin); setError(''); setSuccessMsg(''); }}>
+              {isLogin ? "Créer un compte étudiant" : "Se connecter"}
+            </button>
           </div>
-        )}
-
-        <div className="auth-toggle">
-          {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}
-          <button type="button" className="auth-toggle-btn" onClick={() => { setIsLogin(!isLogin); setError(''); setSuccessMsg(''); }}>
-            {isLogin ? "Créer un compte étudiant" : "Se connecter"}
-          </button>
         </div>
       </div>
     </div>
