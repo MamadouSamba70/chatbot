@@ -8,7 +8,8 @@ from .views import (
     RegisterFCMTokenView, 
     StudentViewSet,
     MyTokenObtainPairView,
-    ChatbotView
+    ChatbotView,
+    ProfileView
 )
 
 router = DefaultRouter()
@@ -22,6 +23,7 @@ urlpatterns = [
     path('auth/login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/fcm-token/', RegisterFCMTokenView.as_view(), name='register_fcm_token'),
+    path('auth/profile/', ProfileView.as_view(), name='auth_profile'),
     
     # Chatbot endpoint
     path('chat/', ChatbotView.as_view(), name='chatbot_chat'),

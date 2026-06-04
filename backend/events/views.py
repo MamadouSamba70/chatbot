@@ -89,3 +89,68 @@ class ChatbotView(APIView):
         
         response_data = process_chatbot_message(request.user, message)
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+class ProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        data = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+        }
+        if hasattr(user, 'profile'):
+            data.update({
+                "nom": user.profile.nom,
+                "prenom": user.profile.prenom,
+                "matricule": user.profile.matricule,
+                "sexe": user.profile.sexe,
+                "universite": user.profile.universite,
+                "faculte": user.profile.faculte,
+                "departement": user.profile.departement,
+                "telephone": user.profile.telephone,
+                "niveau_licence": user.profile.niveau_licence,
+            })
+        else:
+            data.update({
+                "nom": user.last_name,
+                "prenom": user.first_name,
+                "matricule": user.username,
+                "sexe": "M",
+                "universite": "UGANC",
+                "faculte": "",
+                "departement": "",
+                "telephone": "",
+                "niveau_licence": "Licence 1",
+            })
+        return Response(data)
+
+    def put(self, request):
+        user = request.user
+        email = request.data.get('email', user.email)
+        user.email = email
+        password = request.data.get('password')
+        if password:
+            user.set_password(password)
+        
+        nom = request.data.get('nom', user.last_name)
+        prenom = request.data.get('prenom', user.first_name)
+        user.first_name = prenom
+        user.last_name = nom
+        user.save()
+
+        if hasattr(user, 'profile'):
+            profile = user.profile
+            profile.nom = nom
+            profile.prenom = prenom
+            profile.sexe = request.data.get('sexe', profile.sexe)
+            profile.universite = request.data.get('universite', profile.universite)
+            profile.faculte = request.data.get('faculte', profile.faculte)
+            profile.departement = request.data.get('departement', profile.departement)
+            profile.telephone = request.data.get('telephone', profile.telephone)
+            profile.niveau_licence = request.data.get('niveau_licence', profile.niveau_licence)
+            profile.save()
+        
+        return Response({"success": "Profil mis à jour avec succès"})

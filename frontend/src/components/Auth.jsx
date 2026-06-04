@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { LogIn, UserPlus, Mail, Lock, User as UserIcon, GraduationCap, School, BookOpen, UserCheck, ArrowLeft } from 'lucide-react';
+import { LogIn, UserPlus, Mail, Lock, User as UserIcon, GraduationCap, School, BookOpen, UserCheck, ArrowLeft, Phone } from 'lucide-react';
 import ugancLogo from '../assets/uganc_logo.png';
 import centreLogo from '../assets/centre_informatique_logo.png';
 import ugancHero from '../assets/uganc_hero.png';
@@ -24,6 +24,8 @@ export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
   const [universite, setUniversite] = useState('');
   const [faculte, setFaculte] = useState('');
   const [departement, setDepartement] = useState('');
+  const [telephone, setTelephone] = useState('');
+  const [niveauLicence, setNiveauLicence] = useState('Licence 1');
   const [password, setPassword] = useState('');
 
   const handleSubmit = async (e) => {
@@ -52,6 +54,8 @@ export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
           universite: universite.trim(),
           faculte: faculte.trim(),
           departement: departement.trim(),
+          telephone: telephone.trim(),
+          niveau_licence: niveauLicence,
           password
         });
         
@@ -69,6 +73,8 @@ export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
         setUniversite('');
         setFaculte('');
         setDepartement('');
+        setTelephone('');
+        setNiveauLicence('Licence 1');
         setPassword('');
       }
     } catch (err) {
@@ -298,6 +304,38 @@ export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
                   </div>
                 </div>
 
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Numéro de téléphone</label>
+                    <div className="input-wrapper">
+                      <span className="input-icon"><Phone size={18} /></span>
+                      <input 
+                        type="tel" 
+                        className="form-input" 
+                        placeholder="Ex: +224 622 00 00 00" 
+                        value={telephone} 
+                        onChange={e => setTelephone(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Niveau de licence</label>
+                    <select 
+                      className="form-input" 
+                      style={{ paddingLeft: '16px' }}
+                      value={niveauLicence} 
+                      onChange={e => setNiveauLicence(e.target.value)}
+                    >
+                      <option value="Licence 1">Licence 1</option>
+                      <option value="Licence 2">Licence 2</option>
+                      <option value="Licence 3">Licence 3</option>
+                      <option value="Licence 4">Licence 4</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Mot de passe</label>
                   <div className="input-wrapper">
@@ -321,11 +359,7 @@ export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
             </button>
           </form>
 
-          {isLogin && (
-            <div style={{ marginTop: '16px', padding: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-              Accès administration pour évaluation : <strong style={{ color: 'var(--text-secondary)' }}>admin</strong> / <strong style={{ color: 'var(--text-secondary)' }}>adminpassword</strong>
-            </div>
-          )}
+
 
           <div className="auth-toggle">
             {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}

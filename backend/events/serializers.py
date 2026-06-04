@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Event, Notification, FCMToken, StudentProfile
+from .models import Event, Notification, FCMToken, StudentProfile, AllowedStudent
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -38,12 +38,21 @@ class StudentSerializer(serializers.ModelSerializer):
     universite = serializers.CharField(source='profile.universite')
     faculte = serializers.CharField(source='profile.faculte')
     departement = serializers.CharField(source='profile.departement')
+    telephone = serializers.CharField(source='profile.telephone', required=False, allow_blank=True, default='')
+    niveau_licence = serializers.CharField(source='profile.niveau_licence', required=False, default='Licence 1')
     password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'date_joined', 'nom', 'prenom', 'matricule', 'sexe', 'universite', 'faculte', 'departement', 'password')
+        fields = ('id', 'username', 'email', 'date_joined', 'nom', 'prenom', 'matricule', 'sexe', 'universite', 'faculte', 'departement', 'telephone', 'niveau_licence', 'password')
         read_only_fields = ('username', 'date_joined')
+
+    def validate(self, attrs):
+        profile = attrs.get('profile', {})
+        matricule = profile.get('matricule')
+        if matricule and not AllowedStudent.objects.filter(matricule=matricule).exists():
+            raise serializers.ValidationError({"matricule": "Erreur de matricule : ce matricule ne figure pas dans la liste officielle des étudiants autorisés."})
+        return attrs
 
     def create(self, validated_data):
         profile_data = validated_data.pop('profile')
@@ -99,10 +108,18 @@ class UserSerializer(serializers.ModelSerializer):
     universite = serializers.CharField(write_only=True)
     faculte = serializers.CharField(write_only=True)
     departement = serializers.CharField(write_only=True)
+    telephone = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
+    niveau_licence = serializers.CharField(write_only=True, required=False, default='Licence 1')
 
     class Meta:
         model = User
-        fields = ('id', 'email', 'password', 'nom', 'prenom', 'matricule', 'sexe', 'universite', 'faculte', 'departement')
+        fields = ('id', 'email', 'password', 'nom', 'prenom', 'matricule', 'sexe', 'universite', 'faculte', 'departement', 'telephone', 'niveau_licence')
+
+    def validate(self, attrs):
+        matricule = attrs.get('matricule')
+        if matricule and not AllowedStudent.objects.filter(matricule=matricule).exists():
+            raise serializers.ValidationError({"matricule": "Erreur de matricule : ce matricule ne figure pas dans la liste officielle des étudiants autorisés."})
+        return attrs
 
     def create(self, validated_data):
         nom = validated_data.pop('nom')
@@ -112,6 +129,8 @@ class UserSerializer(serializers.ModelSerializer):
         universite = validated_data.pop('universite')
         faculte = validated_data.pop('faculte')
         departement = validated_data.pop('departement')
+        telephone = validated_data.pop('telephone', '')
+        niveau_licence = validated_data.pop('niveau_licence', 'Licence 1')
 
         user = User.objects.create_user(
             username=matricule,
@@ -129,7 +148,9 @@ class UserSerializer(serializers.ModelSerializer):
             sexe=sexe,
             universite=universite,
             faculte=faculte,
-            departement=departement
+            departement=departement,
+            telephone=telephone,
+            niveau_licence=niveau_licence
         )
         return user
 

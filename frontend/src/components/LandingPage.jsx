@@ -64,10 +64,6 @@ export default function LandingPage({ onGetStarted }) {
       {/* Hero Section */}
       <section className="hero-section">
         <div className="hero-text">
-          <div className="hero-tag">
-            <span className="gold-dot"></span>
-            Portail Universitaire Officiel • UGANC
-          </div>
           <h1 className="serif-title">
             Votre espace d'organisation et de <span className="serif-italic">planification</span> académique
           </h1>
@@ -85,16 +81,8 @@ export default function LandingPage({ onGetStarted }) {
         </div>
 
         {/* The Mockup Display — UGANC card + Phone side by side */}
-        <div className="hero-mockup hero-mockup-container">          
-          {/* UGANC Logo Display Card */}
-          <div className="uganc-display-card glass-panel">
-            <img src={ugancLogo} alt="Université Gamal Abdel Nasser de Conakry" className="uganc-banner-img" />
-            <div className="uganc-card-overlay">
-              <h2>UGANC</h2>
-              <p>Université Gamal Abdel Nasser de Conakry</p>
-            </div>
-          </div>
-          <div className="phone-mockup-card glass-panel" style={{ background: '#090d19' }}>
+        <div className="hero-mockup hero-mockup-container">
+          <div className="phone-mockup-card glass-panel">
             <div className="phone-header">
               <div className="phone-logo">
                 <GraduationCap size={16} className="logo-icon-small" />

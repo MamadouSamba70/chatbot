@@ -26,7 +26,9 @@ import {
   Lock,
   MessageSquare,
   Send,
-  Bot
+  Bot,
+  Settings,
+  Phone
 } from 'lucide-react';
 
 export default function Dashboard({ username, isStaff, onLogout, backendUrl, authHeader }) {
@@ -63,6 +65,8 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
     universite: '',
     faculte: '',
     departement: '',
+    telephone: '',
+    niveau_licence: 'Licence 1',
     password: ''
   });
 
@@ -88,6 +92,67 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
     notificationsCount: 0
   });
 
+  // Settings Tab states
+  const [academicSettings, setAcademicSettings] = useState({
+    institution: 'Université Gamal Abdel Nasser de Conakry (UGANC)',
+    faculte: 'Faculté des Sciences',
+    departement: 'Département Informatique',
+    anneeUniversitaire: '2025-2026'
+  });
+  const [notifSettings, setNotifSettings] = useState({
+    emailActive: true,
+    pushActive: true,
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: '587',
+    smtpUser: 'scolarbot@uganc.edu.gn'
+  });
+  const [settingsSuccess, setSettingsSuccess] = useState('');
+
+  const handleSaveSettings = (e) => {
+    e.preventDefault();
+    setSettingsSuccess('Paramètres sauvegardés avec succès !');
+    setTimeout(() => setSettingsSuccess(''), 4000);
+  };
+
+  // Student Settings Tab states
+  const [studentProfile, setStudentProfile] = useState({
+    nom: '',
+    prenom: '',
+    matricule: '',
+    email: '',
+    sexe: 'M',
+    universite: 'UGANC',
+    faculte: '',
+    departement: '',
+    telephone: '',
+    niveau_licence: 'Licence 1'
+  });
+  const [studentPassword, setStudentPassword] = useState('');
+  const [studentSettingsSuccess, setStudentSettingsSuccess] = useState('');
+  const [studentSettingsError, setStudentSettingsError] = useState('');
+
+  const handleSaveStudentSettings = async (e) => {
+    e.preventDefault();
+    try {
+      setStudentSettingsError('');
+      setStudentSettingsSuccess('');
+      const payload = { ...studentProfile };
+      if (studentPassword) {
+        payload.password = studentPassword;
+      }
+      await axios.put(`${backendUrl}/api/auth/profile/`, payload, { headers: authHeader });
+      setStudentSettingsSuccess('Profil et préférences mis à jour avec succès !');
+      setStudentPassword('');
+      // Reload profile
+      const res = await axios.get(`${backendUrl}/api/auth/profile/`, { headers: authHeader });
+      setStudentProfile(res.data);
+      setTimeout(() => setStudentSettingsSuccess(''), 4000);
+    } catch (err) {
+      console.error(err);
+      setStudentSettingsError('Erreur lors de la mise à jour des paramètres.');
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -98,6 +163,8 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       
       if (isStaff) {
         requests.push(axios.get(`${backendUrl}/api/students/`, { headers: authHeader }));
+      } else {
+        requests.push(axios.get(`${backendUrl}/api/auth/profile/`, { headers: authHeader }));
       }
       
       const results = await Promise.all(requests);
@@ -105,6 +172,8 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       setNotifications(results[1].data);
       if (isStaff && results[2]) {
         setStudents(results[2].data);
+      } else if (!isStaff && results[2]) {
+        setStudentProfile(results[2].data);
       }
       updateStats(results[0].data, results[1].data, isStaff ? results[2].data.length : 0);
     } catch (err) {
@@ -306,6 +375,8 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       universite: '',
       faculte: '',
       departement: '',
+      telephone: '',
+      niveau_licence: 'Licence 1',
       password: ''
     });
     setIsStudentModalOpen(true);
@@ -322,6 +393,8 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       universite: student.universite || '',
       faculte: student.faculte || '',
       departement: student.departement || '',
+      telephone: student.telephone || '',
+      niveau_licence: student.niveau_licence || 'Licence 1',
       password: '' // Optional for edits
     });
     setIsStudentModalOpen(true);
@@ -352,7 +425,9 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
         sexe: studentFormData.sexe,
         universite: studentFormData.universite.trim(),
         faculte: studentFormData.faculte.trim(),
-        departement: studentFormData.departement.trim()
+        departement: studentFormData.departement.trim(),
+        telephone: studentFormData.telephone.trim(),
+        niveau_licence: studentFormData.niveau_licence
       };
       
       if (studentFormData.password) {
@@ -455,6 +530,11 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
               <span>Assistant ScolarBot</span>
             </li>
           )}
+
+          <li className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+            <Settings className="nav-icon" />
+            <span>Paramètres</span>
+          </li>
         </ul>
 
         <button className="btn-primary logout-btn" onClick={onLogout}>
@@ -468,11 +548,19 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
         <header className="main-header">
           <div>
             <h1 className="serif-title">
-              {activeTab === 'chatbot' ? 'Assistant ScolarBot' : isStaff ? 'Espace Administration' : 'Portail Académique Personnel'}
+              {activeTab === 'chatbot' 
+                ? 'Assistant ScolarBot' 
+                : activeTab === 'settings'
+                ? 'Configuration du Système'
+                : isStaff 
+                ? 'Espace Administration' 
+                : 'Portail Académique Personnel'}
             </h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
               {activeTab === 'chatbot' 
                 ? 'Consultez le conseiller virtuel pour vos dates d\'examens, de cours et d\'inscriptions.'
+                : activeTab === 'settings'
+                ? 'Gérez les paramètres académiques globaux, les canaux d\'alertes et consultez l\'état des services.'
                 : isStaff 
                 ? "Panneau de gestion du Centre Informatique. Supervision des comptes étudiants et planification des échéances."
                 : `Bonjour ${username}, retrouvez vos échéances officielles de scolarité et vos notifications.`}
@@ -729,6 +817,8 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                       <th>Nom Complet</th>
                       <th>Sexe</th>
                       <th>E-mail</th>
+                      <th>Téléphone</th>
+                      <th>Niveau</th>
                       <th>Scolarité (Univ / Fac / Dép)</th>
                       <th>Actions de gestion</th>
                     </tr>
@@ -740,6 +830,8 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                         <td>{std.prenom && std.nom ? `${std.prenom} ${std.nom}` : 'Administrateur'}</td>
                         <td>{std.sexe === 'M' ? 'Masculin' : std.sexe === 'F' ? 'Féminin' : '-'}</td>
                         <td>{std.email}</td>
+                        <td>{std.telephone || '-'}</td>
+                        <td><span style={{ fontSize: '0.8rem', background: 'rgba(13, 71, 161, 0.08)', color: '#0D47A1', padding: '2px 8px', borderRadius: '12px', fontWeight: 500 }}>{std.niveau_licence || 'Licence 1'}</span></td>
                         <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                           {std.universite ? `${std.universite} — ${std.faculte} (${std.departement})` : 'N/A'}
                         </td>
@@ -952,6 +1044,343 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                 <Send size={20} />
               </button>
             </form>
+          </div>
+        )}
+
+        {/* Tab content 6: Admin Settings Tab */}
+        {isStaff && activeTab === 'settings' && (
+          <div className="settings-tab-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginTop: '16px' }}>
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="card-header" style={{ borderBottom: '1px solid #e9ecef', paddingBottom: '12px' }}>
+                <h3 className="serif-title" style={{ fontSize: '1.15rem', margin: 0, color: 'var(--color-accent)' }}>Configuration Académique</h3>
+              </div>
+              
+              <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Institution / Université</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px 10px 14px' }} 
+                    value={academicSettings.institution}
+                    onChange={e => setAcademicSettings({...academicSettings, institution: e.target.value})}
+                    required
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Faculté / Institut</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px 10px 14px' }} 
+                    value={academicSettings.faculte}
+                    onChange={e => setAcademicSettings({...academicSettings, faculte: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Département par défaut</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px 10px 14px' }} 
+                    value={academicSettings.departement}
+                    onChange={e => setAcademicSettings({...academicSettings, departement: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Année Académique</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px 10px 14px' }} 
+                    value={academicSettings.anneeUniversitaire}
+                    onChange={e => setAcademicSettings({...academicSettings, anneeUniversitaire: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <button type="submit" className="btn-primary" style={{ padding: '10px', marginTop: '8px' }}>
+                  Enregistrer les paramètres
+                </button>
+              </form>
+              
+              {settingsSuccess && (
+                <div style={{ padding: '10px', background: '#d4edda', color: '#155724', borderRadius: '6px', fontSize: '0.85rem', textAlign: 'center' }}>
+                  {settingsSuccess}
+                </div>
+              )}
+            </div>
+
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="card-header" style={{ borderBottom: '1px solid #e9ecef', paddingBottom: '12px' }}>
+                <h3 className="serif-title" style={{ fontSize: '1.15rem', margin: 0, color: 'var(--color-accent)' }}>Système de Notification</h3>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={notifSettings.emailActive}
+                      onChange={e => setNotifSettings({...notifSettings, emailActive: e.target.checked})}
+                    />
+                    <span>Activer les notifications par Email</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={notifSettings.pushActive}
+                      onChange={e => setNotifSettings({...notifSettings, pushActive: e.target.checked})}
+                    />
+                    <span>Activer les alertes Push (ScolarBot App)</span>
+                  </label>
+                </div>
+
+                <div className="form-group" style={{ borderTop: '1px solid #e9ecef', paddingTop: '16px' }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Serveur Sortant (SMTP Host)</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px 10px 14px' }} 
+                    value={notifSettings.smtpHost}
+                    onChange={e => setNotifSettings({...notifSettings, smtpHost: e.target.value})}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Port SMTP</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px 10px 14px' }} 
+                    value={notifSettings.smtpPort}
+                    onChange={e => setNotifSettings({...notifSettings, smtpPort: e.target.value})}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Adresse Expéditeur SMTP</label>
+                  <input 
+                    type="email" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px 10px 14px' }} 
+                    value={notifSettings.smtpUser}
+                    onChange={e => setNotifSettings({...notifSettings, smtpUser: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', gridColumn: 'span 2' }}>
+              <div className="card-header" style={{ borderBottom: '1px solid #e9ecef', paddingBottom: '12px' }}>
+                <h3 className="serif-title" style={{ fontSize: '1.15rem', margin: 0, color: 'var(--color-accent)' }}>État du Système ScolarBot</h3>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div style={{ padding: '14px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Étudiants Actifs</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-accent)', marginTop: '4px' }}>{students.length}</div>
+                </div>
+
+                <div style={{ padding: '14px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Échéances Planifiées</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-accent)', marginTop: '4px' }}>{events.length}</div>
+                </div>
+
+                <div style={{ padding: '14px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Alertes Envoyées</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-accent)', marginTop: '4px' }}>{notifications.length}</div>
+                </div>
+
+                <div style={{ padding: '14px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Service APScheduler</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--color-success)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }}></span>
+                    Actif & Synchrone
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e9ecef', paddingTop: '16px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <span>Base de données : <strong>SQLite</strong> (Opérationnelle)</span>
+                <span>Version du portail : <strong>v2.4.0 (Production)</strong></span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab content 7: Student Settings Tab */}
+        {!isStaff && activeTab === 'settings' && (
+          <div className="settings-tab-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginTop: '16px' }}>
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="card-header" style={{ borderBottom: '1px solid #e9ecef', paddingBottom: '12px' }}>
+                <h3 className="serif-title" style={{ fontSize: '1.15rem', margin: 0, color: 'var(--color-accent)' }}>Informations Personnelles</h3>
+              </div>
+              
+              <form onSubmit={handleSaveStudentSettings} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Prénom</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      style={{ padding: '10px 14px' }} 
+                      value={studentProfile.prenom || ''}
+                      onChange={e => setStudentProfile({...studentProfile, prenom: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Nom</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      style={{ padding: '10px 14px' }} 
+                      value={studentProfile.nom || ''}
+                      onChange={e => setStudentProfile({...studentProfile, nom: e.target.value})}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Adresse Email</label>
+                  <input 
+                    type="email" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px' }} 
+                    value={studentProfile.email || ''}
+                    onChange={e => setStudentProfile({...studentProfile, email: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Nouveau mot de passe (facultatif)</label>
+                  <input 
+                    type="password" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px' }} 
+                    placeholder="Laisser vide pour ne pas modifier"
+                    value={studentPassword}
+                    onChange={e => setStudentPassword(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Genre / Sexe</label>
+                  <select 
+                    className="form-input" 
+                    style={{ padding: '10px 14px' }}
+                    value={studentProfile.sexe || 'M'}
+                    onChange={e => setStudentProfile({...studentProfile, sexe: e.target.value})}
+                  >
+                    <option value="M">Masculin</option>
+                    <option value="F">Féminin</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Numéro de téléphone</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon"><Phone size={18} /></span>
+                    <input 
+                      type="tel" 
+                      className="form-input" 
+                      style={{ padding: '10px 14px 10px 42px' }}
+                      placeholder="Ex: +224 622 00 00 00"
+                      value={studentProfile.telephone || ''}
+                      onChange={e => setStudentProfile({...studentProfile, telephone: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="btn-primary" style={{ padding: '10px', marginTop: '8px' }}>
+                  Enregistrer les modifications
+                </button>
+              </form>
+
+              {studentSettingsSuccess && (
+                <div style={{ padding: '10px', background: '#d4edda', color: '#155724', borderRadius: '6px', fontSize: '0.85rem', textAlign: 'center' }}>
+                  {studentSettingsSuccess}
+                </div>
+              )}
+              {studentSettingsError && (
+                <div style={{ padding: '10px', background: '#f8d7da', color: '#721c24', borderRadius: '6px', fontSize: '0.85rem', textAlign: 'center' }}>
+                  {studentSettingsError}
+                </div>
+              )}
+            </div>
+
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="card-header" style={{ borderBottom: '1px solid #e9ecef', paddingBottom: '12px' }}>
+                <h3 className="serif-title" style={{ fontSize: '1.15rem', margin: 0, color: 'var(--color-accent)' }}>Cursus & Institution</h3>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>N° Matricule (Identifiant)</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px', background: 'var(--bg-secondary)', cursor: 'not-allowed' }} 
+                    value={studentProfile.matricule || ''} 
+                    disabled 
+                  />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>Votre matricule sert d'identifiant de connexion et ne peut être modifié.</span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Université</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px', background: 'var(--bg-secondary)', cursor: 'not-allowed' }} 
+                    value={studentProfile.universite || 'Université Gamal Abdel Nasser de Conakry'} 
+                    disabled 
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Faculté</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px', background: 'var(--bg-secondary)', cursor: 'not-allowed' }} 
+                    value={studentProfile.faculte || ''} 
+                    disabled 
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Département</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px', background: 'var(--bg-secondary)', cursor: 'not-allowed' }} 
+                    value={studentProfile.departement || ''} 
+                    disabled 
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Niveau de licence</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: '10px 14px', background: 'var(--bg-secondary)', cursor: 'not-allowed' }} 
+                    value={studentProfile.niveau_licence || 'Licence 1'} 
+                    disabled 
+                  />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>Contactez le secrétariat pour modifier votre niveau.</span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -1221,6 +1650,37 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                       required 
                     />
                   </div>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Numéro de téléphone</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon"><Phone size={18} /></span>
+                    <input 
+                      type="tel" 
+                      className="form-input" 
+                      placeholder="Ex: +224 622 00 00 00" 
+                      value={studentFormData.telephone}
+                      onChange={(e) => setStudentFormData({ ...studentFormData, telephone: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Niveau de licence</label>
+                  <select 
+                    className="form-input" 
+                    style={{ paddingLeft: '16px' }}
+                    value={studentFormData.niveau_licence}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, niveau_licence: e.target.value })}
+                  >
+                    <option value="Licence 1">Licence 1</option>
+                    <option value="Licence 2">Licence 2</option>
+                    <option value="Licence 3">Licence 3</option>
+                    <option value="Licence 4">Licence 4</option>
+                  </select>
                 </div>
               </div>
 

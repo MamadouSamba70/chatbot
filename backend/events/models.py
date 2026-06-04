@@ -1,6 +1,16 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+class AllowedStudent(models.Model):
+    matricule = models.CharField(max_length=50, unique=True)
+    nom = models.CharField(max_length=150)
+    prenom = models.CharField(max_length=150)
+    departement = models.CharField(max_length=150, default='NTIC')
+    niveau_licence = models.CharField(max_length=50, default='Licence 3')
+
+    def __str__(self):
+        return f"{self.prenom} {self.nom} ({self.matricule})"
+
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     nom = models.CharField(max_length=150)
@@ -10,6 +20,17 @@ class StudentProfile(models.Model):
     universite = models.CharField(max_length=200)
     faculte = models.CharField(max_length=200)
     departement = models.CharField(max_length=200)
+    telephone = models.CharField(max_length=30, blank=True, default='')
+    niveau_licence = models.CharField(
+        max_length=20, 
+        default='Licence 1', 
+        choices=[
+            ('Licence 1', 'Licence 1'), 
+            ('Licence 2', 'Licence 2'), 
+            ('Licence 3', 'Licence 3'), 
+            ('Licence 4', 'Licence 4')
+        ]
+    )
 
     def __str__(self):
         return f"{self.prenom} {self.nom} ({self.matricule})"
