@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import ugancLogo from '../assets/uganc_logo.png';
+import centreLogo from '../assets/centre_informatique_logo.png';
 import { 
   Calendar, 
   Clock, 
@@ -28,7 +29,10 @@ import {
   Send,
   Bot,
   Settings,
-  Phone
+  Phone,
+  Mic,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 
 const DEPARTMENTS_BY_FACULTY = {
@@ -68,6 +72,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
   const [events, setEvents] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [students, setStudents] = useState([]);
+  const [pendingStudents, setPendingStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('all');
   
@@ -114,6 +119,19 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
   const [chatLoading, setChatLoading] = useState(false);
   
   const messagesEndRef = useRef(null);
+
+  // Voice feature states — useRef to avoid stale closures in async callbacks
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const isListeningRef = useRef(false);
+  const sendVoiceMessageRef = useRef(null); // always points to latest sendChatMessageDirect
+  const autoVoiceResponseRef = useRef(false); // always reads current autoVoiceResponse state
+  const [autoVoiceResponse, setAutoVoiceResponse] = useState(false);
+  const [welcomeGenerated, setWelcomeGenerated] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
+
+  // Keep autoVoiceResponseRef in sync on every render
+  autoVoiceResponseRef.current = autoVoiceResponse;
 
   // Stats
   const [stats, setStats] = useState({
@@ -196,6 +214,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       
       if (isStaff) {
         requests.push(axios.get(`${backendUrl}/api/students/`, { headers: authHeader }));
+        requests.push(axios.get(`${backendUrl}/api/students/pending/`, { headers: authHeader }));
       } else {
         requests.push(axios.get(`${backendUrl}/api/auth/profile/`, { headers: authHeader }));
       }
@@ -203,8 +222,9 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       const results = await Promise.all(requests);
       setEvents(results[0].data);
       setNotifications(results[1].data);
-      if (isStaff && results[2]) {
-        setStudents(results[2].data);
+      if (isStaff) {
+        if (results[2]) setStudents(results[2].data);
+        if (results[3]) setPendingStudents(results[3].data);
       } else if (!isStaff && results[2]) {
         setStudentProfile(results[2].data);
       }
@@ -238,12 +258,14 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       ];
       if (isStaff) {
         requests.push(axios.get(`${backendUrl}/api/students/`, { headers: authHeader }));
+        requests.push(axios.get(`${backendUrl}/api/students/pending/`, { headers: authHeader }));
       }
       const results = await Promise.all(requests);
       setEvents(results[0].data);
       setNotifications(results[1].data);
-      if (isStaff && results[2]) {
-        setStudents(results[2].data);
+      if (isStaff) {
+        if (results[2]) setStudents(results[2].data);
+        if (results[3]) setPendingStudents(results[3].data);
       }
       updateStats(results[0].data, results[1].data, isStaff ? results[2].data.length : 0);
     } catch (err) {
@@ -272,22 +294,173 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Chatbot Send Message Handler
-  const handleSendChatMessage = async (e) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
+  // Clean up speech synthesis on tab changes/unmount
+  useEffect(() => {
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [activeTab]);
 
-    const userText = chatInput;
+  // Generate dynamic welcome message based on student profile and connection time
+  useEffect(() => {
+    if (!isStaff && studentProfile && studentProfile.prenom && !welcomeGenerated) {
+      const hour = new Date().getHours();
+      const greeting = (hour >= 5 && hour < 18) ? "Bonjour" : "Bonsoir";
+      
+      const welcomeText = `${greeting} ${studentProfile.prenom} ${studentProfile.nom} ! 👋\n\n` +
+        `Ravi de vous revoir connecté. Voici un aperçu de votre profil étudiant :\n` +
+        `- **Nom complet** : ${studentProfile.prenom} ${studentProfile.nom}\n` +
+        `- **Matricule** : \`${studentProfile.matricule || 'N/A'}\`\n` +
+        `- **Faculté** : ${studentProfile.faculte || 'N/A'}\n` +
+        `- **Département** : ${studentProfile.departement || 'N/A'}\n` +
+        `- **Niveau** : ${studentProfile.niveau_licence || 'N/A'}\n\n` +
+        `Je suis **ScolarBot**, votre assistant universitaire personnel. Je suis programmé pour répondre à toutes vos questions liées aux dates, examens, soutenances ou inscriptions. Je peux également vous donner des conseils d'étude.\n\n` +
+        `👉 **Astuce** : Vous pouvez me parler en cliquant sur le micro 🎙️ et activer le retour vocal pour m'entendre parler !`;
+
+      setChatMessages([
+        { sender: 'bot', text: welcomeText }
+      ]);
+      setWelcomeGenerated(true);
+    }
+  }, [studentProfile, isStaff, welcomeGenerated]);
+
+  // Text-To-Speech (TTS) — strips markdown/emojis for natural French speech
+  const speakText = (text) => {
+    if (!window.speechSynthesis) {
+      setVoiceError('La synthèse vocale n\'est pas supportée par ce navigateur.');
+      return;
+    }
+    window.speechSynthesis.cancel();
+
+    // Strip markdown and emojis
+    const cleanText = text
+      .replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')
+      .replace(/^- /gm, '').replace(/#{1,6} /g, '')
+      .replace(/[\u{1F300}-\u{1FFFF}]/gu, '')
+      .replace(/[\u{2600}-\u{26FF}]/gu, '')
+      .replace(/[\u{2700}-\u{27BF}]/gu, '')
+      .trim();
+
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'fr-FR';
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    // Firefox fix: wait for voices to load
+    const doSpeak = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const frVoice = voices.find(v => v.lang.startsWith('fr'));
+      if (frVoice) utterance.voice = frVoice;
+      window.speechSynthesis.speak(utterance);
+    };
+
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.onvoiceschanged = doSpeak;
+    } else {
+      doSpeak();
+    }
+  };
+
+  // Speech-To-Text (STT) — uses useRef to avoid stale closure bugs
+  const toggleListening = () => {
+    setVoiceError('');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setVoiceError('❌ Reconnaissance vocale non supportée. Utilisez Chrome ou Edge.');
+      return;
+    }
+
+    // If already listening, stop
+    if (isListeningRef.current) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+      isListeningRef.current = false;
+      setIsListening(false);
+      return;
+    }
+
+    // Start listening
+    const rec = new SpeechRecognition();
+    rec.lang = 'fr-FR';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.continuous = false; // single-shot per click for reliability
+
+    rec.onstart = () => {
+      isListeningRef.current = true;
+      setIsListening(true);
+      setVoiceError('');
+    };
+
+    rec.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(r => r[0].transcript)
+        .join(' ')
+        .trim();
+
+      if (transcript) {
+        setChatInput(transcript);
+      }
+    };
+
+    rec.onerror = (event) => {
+      isListeningRef.current = false;
+      setIsListening(false);
+      recognitionRef.current = null;
+
+      const errorMessages = {
+        'not-allowed': '🎙️ Accès au microphone refusé. Autorisez le micro dans les paramètres du navigateur.',
+        'no-speech': '🔇 Aucune voix détectée. Essayez à nouveau.',
+        'audio-capture': '🎙️ Aucun microphone détecté sur cet appareil.',
+        'network': '🌐 Erreur réseau. Vérifiez votre connexion internet.',
+        'aborted': '',
+      };
+      const msg = errorMessages[event.error] || `Erreur vocale : ${event.error}`;
+      if (msg) setVoiceError(msg);
+    };
+
+    rec.onend = () => {
+      isListeningRef.current = false;
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = rec;
+    try {
+      rec.start();
+    } catch (e) {
+      setVoiceError('❌ Impossible de démarrer la reconnaissance vocale.');
+      recognitionRef.current = null;
+    }
+  };
+
+  // Direct send chat message (supporting voice trigger)
+  const sendChatMessageDirect = async (messageText, wasSpoken = false) => {
+    if (!messageText.trim()) return;
+
     setChatInput('');
-    setChatMessages(prev => [...prev, { sender: 'user', text: userText }]);
+    setChatMessages(prev => [...prev, { sender: 'user', text: messageText }]);
     setChatLoading(true);
 
     try {
       const response = await axios.post(`${backendUrl}/api/chat/`, {
-        message: userText
+        message: messageText
       }, { headers: authHeader });
 
-      setChatMessages(prev => [...prev, { sender: 'bot', text: response.data.response }]);
+      const botReply = response.data.response;
+      setChatMessages(prev => [...prev, { sender: 'bot', text: botReply }]);
+
+      // Speak if it was voice input or if auto voice response is active
+      if (wasSpoken || autoVoiceResponseRef.current) {
+        speakText(botReply);
+      }
 
       // Trigger automatic UI refresh if an event or notification was created via NLP
       if (response.data.action === 'event_created' || response.data.action === 'notification_created') {
@@ -299,6 +472,17 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
     } finally {
       setChatLoading(false);
     }
+  };
+
+  // CRITICAL: Keep the ref always pointing to the latest version of the function
+  // so async SpeechRecognition callbacks never capture a stale closure
+  sendVoiceMessageRef.current = sendChatMessageDirect;
+
+  // Chatbot Send Message Handler
+  const handleSendChatMessage = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    sendChatMessageDirect(chatInput, false);
   };
 
   // Simple Markdown Helper
@@ -327,7 +511,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       description: '',
       date: '',
       event_type: 'examen',
-      user_id: preselectedStudentId || (students.length > 0 ? students[0].id : '')
+      user_id: preselectedStudentId || ''
     });
     setIsModalOpen(true);
   };
@@ -447,6 +631,32 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
     }
   };
 
+  const handleApproveStudent = async (studentId) => {
+    try {
+      await axios.post(`${backendUrl}/api/students/${studentId}/approve/`, {}, { headers: authHeader });
+      const approved = pendingStudents.find(s => s.id === studentId);
+      setPendingStudents(pendingStudents.filter(s => s.id !== studentId));
+      if (approved && !students.some(s => s.id === studentId)) {
+        setStudents([...students, { ...approved, is_active: true, is_approved: true }]);
+      }
+    } catch (err) {
+      console.error("Error approving student:", err);
+      alert("Erreur lors de la validation du compte étudiant.");
+    }
+  };
+
+  const handleRejectStudent = async (studentId) => {
+    if (window.confirm("Êtes-vous sûr de vouloir rejeter cette demande d'inscription ? Le compte temporaire sera définitivement supprimé.")) {
+      try {
+        await axios.post(`${backendUrl}/api/students/${studentId}/reject/`, {}, { headers: authHeader });
+        setPendingStudents(pendingStudents.filter(s => s.id !== studentId));
+      } catch (err) {
+        console.error("Error rejecting student:", err);
+        alert("Erreur lors du rejet du compte étudiant.");
+      }
+    }
+  };
+
   const handleStudentFormSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -519,7 +729,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
       {/* Sidebar Left: Navigation */}
       <aside className="sidebar-left">
         <div className="sidebar-logo">
-          <img src={ugancLogo} alt="Logo UGANC" className="sidebar-logo-img" />
+          <img src={centreLogo} alt="Logo Centre Informatique" className="sidebar-logo-img" />
           <h2 className="serif-title" style={{ fontSize: '1.25rem', letterSpacing: '0.5px' }}>ReminderBot</h2>
         </div>
         
@@ -546,6 +756,26 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
             </li>
           )}
           
+          {isStaff && (
+            <li className={`nav-item ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
+              <Clock className="nav-icon" />
+              <span>En attente</span>
+              {pendingStudents.length > 0 && (
+                <span className="badge-count" style={{
+                  background: 'var(--color-examen)',
+                  color: 'white',
+                  borderRadius: '50%',
+                  padding: '2px 6px',
+                  fontSize: '0.7rem',
+                  marginLeft: 'auto',
+                  fontWeight: 'bold'
+                }}>
+                  {pendingStudents.length}
+                </span>
+              )}
+            </li>
+          )}
+          
           <li className={`nav-item ${activeTab === 'events' ? 'active' : ''}`} onClick={() => setActiveTab('events')}>
             <BookOpen className="nav-icon" />
             <span>{isStaff ? 'Toutes les Échéances' : 'Mes Échéances'}</span>
@@ -556,13 +786,10 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
             <span>{isStaff ? 'Alertes Scolarité' : 'Mes Alertes'}</span>
           </li>
 
-          {/* Chatbot Tab for Students in Left Sidebar */}
-          {!isStaff && (
-            <li className={`nav-item ${activeTab === 'chatbot' ? 'active' : ''}`} onClick={() => setActiveTab('chatbot')}>
-              <MessageSquare className="nav-icon" />
-              <span>Assistant ScolarBot</span>
-            </li>
-          )}
+          <li className={`nav-item ${activeTab === 'chatbot' ? 'active' : ''}`} onClick={() => setActiveTab('chatbot')}>
+            <MessageSquare className="nav-icon" />
+            <span>Assistant ScolarBot</span>
+          </li>
 
           <li className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
             <Settings className="nav-icon" />
@@ -699,7 +926,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                               <div style={{ display: 'flex', gap: '6px' }}>
                                 {isStaff && (
                                   <span className="event-badge" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
-                                    Pour : {event.user}
+                                    Pour : {event.user || 'Tous les étudiants'}
                                   </span>
                                 )}
                                 <span className={`event-badge ${event.event_type}`}>{event.event_type}</span>
@@ -765,7 +992,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                             <div className="timeline-date">{formatShortDate(event.date)}</div>
                             <div className="timeline-content">
                               <div className="timeline-title">{event.title}</div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Étudiant : {event.user}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Étudiant : {event.user || 'Tous les étudiants'}</div>
                             </div>
                           </div>
                         ))}
@@ -776,23 +1003,50 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                 /* Dashboard-integrated chatbot */
                 <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '480px' }}>
                   <div className="card-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px', marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <Bot size={22} style={{ color: 'var(--color-accent)' }} />
-                      <div>
-                        <h2 className="serif-title" style={{ fontSize: '1.1rem', margin: 0 }}>Assistant ScolarBot</h2>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }}></span>
-                          En ligne
-                        </span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Bot size={22} style={{ color: 'var(--color-accent)' }} />
+                        <div>
+                          <h2 className="serif-title" style={{ fontSize: '1.1rem', margin: 0 }}>Assistant ScolarBot</h2>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }}></span>
+                            En ligne
+                          </span>
+                        </div>
                       </div>
+                      
+                      {/* Auto voice toggle */}
+                      <button 
+                        type="button"
+                        onClick={() => setAutoVoiceResponse(!autoVoiceResponse)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: autoVoiceResponse ? 'var(--color-accent)' : 'var(--text-muted)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.75rem',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(255,255,255,0.08)'
+                        }}
+                        title={autoVoiceResponse ? "Désactiver la lecture automatique" : "Activer la lecture automatique"}
+                      >
+                        {autoVoiceResponse ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                        <span>Voix</span>
+                      </button>
                     </div>
                   </div>
 
                   {/* Messages list */}
                   <div className="chat-messages-container" style={{ flex: 1, maxHeight: '350px', minHeight: '300px', overflowY: 'auto', marginBottom: '16px' }}>
                     {chatMessages.map((msg, index) => (
-                      <div key={index} className={`chat-bubble ${msg.sender}`} style={{ marginBottom: '8px' }}>
-                        {msg.sender === 'bot' ? formatBotResponse(msg.text) : msg.text}
+                      <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.sender === 'bot' ? 'flex-start' : 'flex-end', marginBottom: '8px', position: 'relative' }}>
+                        <div className={`chat-bubble ${msg.sender}`}>
+                          {msg.sender === 'bot' ? formatBotResponse(msg.text) : msg.text}
+                        </div>
                       </div>
                     ))}
                     {chatLoading && (
@@ -806,11 +1060,45 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                   </div>
 
                   {/* Input area */}
+                  {isListening && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '6px 12px', marginBottom: '8px',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '8px', fontSize: '0.78rem', color: '#f87171'
+                    }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'micPulse 1.5s infinite' }}></span>
+                      Écoute active — Parlez maintenant pour transcrire votre message...
+                    </div>
+                  )}
                   <form className="chatbot-input-form" onSubmit={handleSendChatMessage} style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px' }}>
+                    <button 
+                      type="button" 
+                      onClick={toggleListening} 
+                      className={`chatbot-mic-btn ${isListening ? 'active' : ''}`}
+                      disabled={chatLoading}
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        background: isListening ? 'var(--color-examen)' : 'rgba(255, 255, 255, 0.05)',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                      title={isListening ? "Écoute en cours... Cliquez pour arrêter" : "Parler (Entrée vocale)"}
+                    >
+                      <Mic size={18} className={isListening ? 'pulse' : ''} />
+                    </button>
                     <input 
                       type="text" 
                       className="chatbot-input" 
-                      placeholder="Posez une question ou planifiez..." 
+                      placeholder={isListening ? "Écoute vocale active..." : "Posez une question ou planifiez..."} 
                       value={chatInput}
                       onChange={e => setChatInput(e.target.value)}
                       disabled={chatLoading}
@@ -820,6 +1108,24 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                       <Send size={18} />
                     </button>
                   </form>
+                  {voiceError && (
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '8px 12px',
+                      background: 'rgba(239, 68, 68, 0.08)',
+                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                      borderRadius: '8px',
+                      fontSize: '0.78rem',
+                      color: '#f87171',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px'
+                    }}>
+                      <span>{voiceError}</span>
+                      <button onClick={() => setVoiceError('')} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>×</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -939,7 +1245,7 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                         <div style={{ display: 'flex', gap: '6px' }}>
                           {isStaff && (
                             <span className="event-badge" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
-                              Étudiant : {event.user}
+                              Étudiant : {event.user || 'Tous les étudiants'}
                             </span>
                           )}
                           <span className={`event-badge ${event.event_type}`}>{event.event_type}</span>
@@ -1012,71 +1318,471 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
           </div>
         )}
 
-        {/* Tab content 5: Full-Page Chatbot (From Sidebar) */}
-        {!isStaff && activeTab === 'chatbot' && (
-          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)', minHeight: '520px' }}>
-            <div className="card-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '14px', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ 
-                  background: 'rgba(197, 168, 128, 0.15)', 
-                  width: '44px', 
-                  height: '44px', 
-                  borderRadius: '12px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  color: 'var(--color-accent)'
-                }}>
-                  <Bot size={26} />
-                </div>
-                <div>
-                  <h2 className="serif-title" style={{ fontSize: '1.25rem', margin: 0 }}>ScolarBot</h2>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px' }}>
-                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block', boxShadow: '0 0 6px var(--color-success)' }}></span>
-                    Opérationnel (En ligne)
-                  </span>
-                </div>
+        {/* Tab content: Pending Approval Accounts (Admin only) */}
+        {isStaff && activeTab === 'pending' && (
+          <div className="glass-panel" style={{ padding: '24px' }}>
+            <div className="card-header" style={{ marginBottom: '20px' }}>
+              <div>
+                <h2 className="serif-title" style={{ fontSize: '1.25rem', marginBottom: '6px' }}>Demandes d'inscription en attente</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  Ces étudiants se sont inscrits mais leurs comptes ne sont pas encore actifs. Veuillez valider ou rejeter leurs demandes.
+                </p>
               </div>
             </div>
 
-            {/* Conversation Log */}
-            <div className="chat-messages-container" style={{ flex: 1, overflowY: 'auto', paddingRight: '6px', marginBottom: '20px' }}>
-              {chatMessages.map((msg, index) => (
-                <div key={index} className={`chat-bubble ${msg.sender}`} style={{ 
-                  marginBottom: '12px', 
-                  maxWidth: '75%', 
-                  padding: '12px 16px',
-                  borderRadius: '14px',
-                  fontSize: '0.92rem'
+            {pendingStudents.length === 0 ? (
+              <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
+                <Clock size={40} style={{ color: 'var(--text-muted)', marginBottom: '12px', opacity: 0.5 }} />
+                <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '4px' }}>Aucune demande en attente</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Tous les comptes étudiants créés sont validés et actifs.</p>
+              </div>
+            ) : (
+              <div className="table-responsive" style={{ overflowX: 'auto' }}>
+                <table className="students-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+                      <th style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase' }}>Étudiant</th>
+                      <th style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase' }}>Matricule</th>
+                      <th style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase' }}>Département / Faculté</th>
+                      <th style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase' }}>Téléphone</th>
+                      <th style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingStudents.map(student => (
+                      <tr key={student.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }} className="student-row-hover">
+                        <td style={{ padding: '16px 8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div className="user-avatar" style={{ 
+                              width: '32px', 
+                              height: '32px', 
+                              borderRadius: '8px', 
+                              background: 'rgba(255,255,255,0.05)', 
+                              color: 'var(--text-primary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.85rem',
+                              fontWeight: 'bold'
+                            }}>
+                              {student.nom ? student.nom.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{student.prenom} {student.nom}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{student.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '16px 8px' }}>
+                          <code style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', color: 'var(--color-accent)' }}>
+                            {student.matricule || student.username}
+                          </code>
+                        </td>
+                        <td style={{ padding: '16px 8px' }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: '500' }}>{student.departement}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{student.faculte} • {student.niveau_licence}</div>
+                        </td>
+                        <td style={{ padding: '16px 8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          {student.telephone || '—'}
+                        </td>
+                        <td style={{ padding: '16px 8px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button 
+                              onClick={() => handleApproveStudent(student.id)} 
+                              style={{
+                                background: 'rgba(52, 211, 153, 0.1)',
+                                border: '1px solid rgba(52, 211, 153, 0.2)',
+                                color: '#34d399',
+                                cursor: 'pointer',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '0.8rem',
+                                fontWeight: '600',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              className="btn-approve-hover"
+                            >
+                              <UserCheck size={14} />
+                              Approuver
+                            </button>
+                            <button 
+                              onClick={() => handleRejectStudent(student.id)} 
+                              style={{
+                                background: 'rgba(248, 113, 113, 0.1)',
+                                border: '1px solid rgba(248, 113, 113, 0.2)',
+                                color: '#f87171',
+                                cursor: 'pointer',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '0.8rem',
+                                fontWeight: '600',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              className="btn-reject-hover"
+                            >
+                              <X size={14} />
+                              Rejeter
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab content 5: Full-Page Chatbot — Style ChatGPT */}
+        {activeTab === 'chatbot' && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: 'calc(100vh - 160px)',
+            minHeight: '540px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-glass)',
+            borderRadius: '20px',
+            overflow: 'hidden',
+          }}>
+
+            {/* ── Header ── */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '16px 24px',
+              borderBottom: '1px solid var(--border-glass)',
+              background: 'var(--bg-card)',
+              flexShrink: 0,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '42px', height: '42px', borderRadius: '12px',
+                  background: 'linear-gradient(135deg, var(--color-accent) 0%, #1565c0 100%)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(13,71,161,0.25)',
                 }}>
-                  {msg.sender === 'bot' ? formatBotResponse(msg.text) : msg.text}
+                  <Bot size={22} color="white" />
+                </div>
+                <div>
+                  <div style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--text-primary)' }}>ScolarBot</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '1px' }}>
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e', display: 'inline-block', boxShadow: '0 0 5px #22c55e' }} />
+                    <span style={{ fontSize: '0.72rem', color: '#22c55e', fontWeight: '500' }}>En ligne</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Controls: clear + auto voice */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setAutoVoiceResponse(!autoVoiceResponse)}
+                  title={autoVoiceResponse ? 'Désactiver la lecture auto' : 'Activer la lecture auto'}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    background: autoVoiceResponse ? 'rgba(13,71,161,0.08)' : 'transparent',
+                    border: `1px solid ${autoVoiceResponse ? 'rgba(13,71,161,0.25)' : 'var(--border-glass)'}`,
+                    borderRadius: '8px', padding: '6px 12px',
+                    color: autoVoiceResponse ? 'var(--color-accent)' : 'var(--text-muted)',
+                    cursor: 'pointer', fontSize: '0.78rem', fontWeight: '500',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {autoVoiceResponse ? <Volume2 size={15} /> : <VolumeX size={15} />}
+                  <span>Voix auto</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setChatMessages([{ sender: 'bot', text: "Bonjour ! 👋 Je suis **ScolarBot**, votre assistant universitaire.\n\nComment puis-je vous aider ?" }])}
+                  title="Nouvelle conversation"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    background: 'transparent',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px', padding: '6px 12px',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer', fontSize: '0.78rem', fontWeight: '500',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <Plus size={15} />
+                  <span>Nouvelle conv.</span>
+                </button>
+              </div>
+            </div>
+
+            {/* ── Messages Area ── */}
+            <div
+              style={{
+                flex: 1, overflowY: 'auto',
+                padding: '24px 32px',
+                display: 'flex', flexDirection: 'column', gap: '6px',
+              }}
+            >
+              {chatMessages.map((msg, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                    marginBottom: '18px',
+                  }}
+                >
+                  {/* Bot avatar */}
+                  {msg.sender === 'bot' && (
+                    <div style={{
+                      width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+                      background: 'linear-gradient(135deg, var(--color-accent) 0%, #1565c0 100%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(13,71,161,0.2)',
+                      marginTop: '2px',
+                    }}>
+                      <Bot size={18} color="white" />
+                    </div>
+                  )}
+
+                  {/* Bubble + actions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '70%' }}>
+                    {/* Sender label */}
+                    <span style={{
+                      fontSize: '0.72rem', fontWeight: '600',
+                      color: 'var(--text-muted)',
+                      paddingLeft: msg.sender === 'bot' ? '4px' : '0',
+                      textAlign: msg.sender === 'user' ? 'right' : 'left',
+                    }}>
+                      {msg.sender === 'bot' ? 'ScolarBot' : username}
+                    </span>
+
+                    {/* Message bubble */}
+                    <div style={{
+                      padding: '12px 16px',
+                      borderRadius: msg.sender === 'bot' ? '4px 16px 16px 16px' : '16px 4px 16px 16px',
+                      background: msg.sender === 'bot'
+                        ? 'var(--bg-secondary)'
+                        : 'linear-gradient(135deg, var(--color-accent) 0%, #1565c0 100%)',
+                      color: msg.sender === 'bot' ? 'var(--text-primary)' : '#ffffff',
+                      fontSize: '0.92rem',
+                      lineHeight: '1.6',
+                      border: msg.sender === 'bot' ? '1px solid var(--border-glass)' : 'none',
+                      boxShadow: msg.sender === 'user' ? '0 2px 10px rgba(13,71,161,0.2)' : '0 1px 4px rgba(0,0,0,0.04)',
+                      wordBreak: 'break-word',
+                    }}>
+                      {msg.sender === 'bot' ? formatBotResponse(msg.text) : msg.text}
+                    </div>
+
+                    {/* Bot action buttons below bubble */}
+                    {msg.sender === 'bot' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', paddingLeft: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => speakText(msg.text)}
+                          title="Lire à haute voix"
+                          style={{
+                            background: 'none', border: 'none',
+                            color: 'var(--text-muted)', cursor: 'pointer',
+                            padding: '3px 6px', borderRadius: '6px',
+                            display: 'flex', alignItems: 'center', gap: '3px',
+                            fontSize: '0.72rem',
+                            transition: 'color 0.15s, background 0.15s',
+                          }}
+                          className="msg-action-btn"
+                        >
+                          <Volume2 size={13} />
+                          <span>Écouter</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(msg.text);
+                          }}
+                          title="Copier le message"
+                          style={{
+                            background: 'none', border: 'none',
+                            color: 'var(--text-muted)', cursor: 'pointer',
+                            padding: '3px 6px', borderRadius: '6px',
+                            display: 'flex', alignItems: 'center', gap: '3px',
+                            fontSize: '0.72rem',
+                            transition: 'color 0.15s, background 0.15s',
+                          }}
+                          className="msg-action-btn"
+                        >
+                          <FileText size={13} />
+                          <span>Copier</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* User avatar */}
+                  {msg.sender === 'user' && (
+                    <div style={{
+                      width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+                      background: 'rgba(13,71,161,0.1)',
+                      border: '2px solid rgba(13,71,161,0.2)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--color-accent)',
+                      fontWeight: '700', fontSize: '0.9rem',
+                      marginTop: '2px',
+                    }}>
+                      {username ? username.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
                 </div>
               ))}
+
+              {/* Typing indicator */}
               {chatLoading && (
-                <div className="chatbot-typing-bubble" style={{ padding: '10px 16px' }}>
-                  <span className="chatbot-typing-dot"></span>
-                  <span className="chatbot-typing-dot"></span>
-                  <span className="chatbot-typing-dot"></span>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '18px' }}>
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+                    background: 'linear-gradient(135deg, var(--color-accent) 0%, #1565c0 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Bot size={18} color="white" />
+                  </div>
+                  <div style={{
+                    padding: '14px 18px',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '4px 16px 16px 16px',
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                  }}>
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--color-accent)', display: 'inline-block', animation: 'typingDot 1.2s infinite 0s' }} />
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--color-accent)', display: 'inline-block', animation: 'typingDot 1.2s infinite 0.2s' }} />
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--color-accent)', display: 'inline-block', animation: 'typingDot 1.2s infinite 0.4s' }} />
+                  </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Form Input Footer */}
-            <form className="chatbot-input-form" onSubmit={handleSendChatMessage} style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '16px' }}>
-              <input 
-                type="text" 
-                className="chatbot-input" 
-                placeholder="Discutez avec ScolarBot AI (ex: Quels sont mes examens ?)..." 
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                disabled={chatLoading}
-                style={{ padding: '12px 16px', borderRadius: '10px', fontSize: '0.9rem' }}
-              />
-              <button type="submit" className="chatbot-send-btn" disabled={chatLoading || !chatInput.trim()} style={{ width: '46px', height: '46px', borderRadius: '10px' }}>
-                <Send size={20} />
-              </button>
-            </form>
+            {/* ── Voice banner ── */}
+            {isListening && (
+              <div style={{
+                margin: '0 24px 4px',
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '8px 14px',
+                background: 'rgba(220, 38, 38, 0.06)',
+                border: '1px solid rgba(220, 38, 38, 0.2)',
+                borderRadius: '10px',
+                fontSize: '0.8rem', color: '#dc2626', flexShrink: 0,
+              }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626', display: 'inline-block', animation: 'micPulse 1.2s infinite', flexShrink: 0 }} />
+                🎙️ Écoute active — Parlez maintenant, votre message sera transcrit dans le champ de saisie...
+              </div>
+            )}
+
+            {/* Voice error */}
+            {voiceError && (
+              <div style={{
+                margin: '0 24px 4px',
+                padding: '8px 14px',
+                background: 'rgba(239,68,68,0.06)',
+                border: '1px solid rgba(239,68,68,0.2)',
+                borderRadius: '10px',
+                fontSize: '0.8rem', color: '#ef4444',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                flexShrink: 0,
+              }}>
+                <span>{voiceError}</span>
+                <button onClick={() => setVoiceError('')} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem' }}>×</button>
+              </div>
+            )}
+
+            {/* ── Input Bar ── */}
+            <div style={{
+              padding: '16px 24px',
+              borderTop: '1px solid var(--border-glass)',
+              background: 'var(--bg-card)',
+              flexShrink: 0,
+            }}>
+              <form
+                onSubmit={handleSendChatMessage}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  background: 'var(--bg-secondary)',
+                  border: '1.5px solid var(--border-glass)',
+                  borderRadius: '14px',
+                  padding: '6px 8px 6px 16px',
+                  transition: 'border-color 0.2s, box-shadow 0.2s',
+                }}
+                className="chatgpt-input-form"
+              >
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  placeholder={isListening ? '🎙️ Écoute active...' : 'Posez une question à ScolarBot...'}
+                  disabled={chatLoading}
+                  style={{
+                    flex: 1,
+                    background: 'none', border: 'none', outline: 'none',
+                    fontSize: '0.93rem', color: 'var(--text-primary)',
+                    padding: '8px 0',
+                    fontFamily: 'var(--font-primary)',
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendChatMessage(e);
+                    }
+                  }}
+                />
+
+                {/* Mic button */}
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  disabled={chatLoading}
+                  title={isListening ? 'Arrêter l\'écoute' : 'Dicter un message (voix)'}
+                  style={{
+                    width: '38px', height: '38px', borderRadius: '10px', flexShrink: 0,
+                    border: isListening ? '1.5px solid rgba(220,38,38,0.4)' : '1.5px solid var(--border-glass)',
+                    background: isListening ? 'rgba(220,38,38,0.08)' : 'transparent',
+                    color: isListening ? '#dc2626' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <Mic size={18} />
+                </button>
+
+                {/* Send button */}
+                <button
+                  type="submit"
+                  disabled={chatLoading || !chatInput.trim()}
+                  title="Envoyer"
+                  style={{
+                    width: '38px', height: '38px', borderRadius: '10px', flexShrink: 0,
+                    border: 'none',
+                    background: chatInput.trim() && !chatLoading
+                      ? 'linear-gradient(135deg, var(--color-accent) 0%, #1565c0 100%)'
+                      : 'rgba(13,71,161,0.1)',
+                    color: chatInput.trim() && !chatLoading ? 'white' : 'var(--text-muted)',
+                    cursor: chatInput.trim() && !chatLoading ? 'pointer' : 'default',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.2s',
+                    boxShadow: chatInput.trim() && !chatLoading ? '0 2px 8px rgba(13,71,161,0.25)' : 'none',
+                  }}
+                >
+                  <Send size={17} />
+                </button>
+              </form>
+
+              <p style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                ScolarBot peut faire des erreurs. Vérifiez les informations importantes.
+              </p>
+            </div>
           </div>
         )}
 
@@ -1474,8 +2180,8 @@ export default function Dashboard({ username, isStaff, onLogout, backendUrl, aut
                     style={{ paddingLeft: '16px' }}
                     value={formData.user_id}
                     onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
-                    required
                   >
+                    <option value="">Tous les étudiants (Événement Global)</option>
                     {students.map(std => (
                       <option key={std.id} value={std.id}>{std.prenom} {std.nom} ({std.matricule || std.username})</option>
                     ))}

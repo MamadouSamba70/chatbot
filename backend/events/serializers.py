@@ -40,11 +40,13 @@ class StudentSerializer(serializers.ModelSerializer):
     departement = serializers.CharField(source='profile.departement')
     telephone = serializers.CharField(source='profile.telephone', required=False, allow_blank=True, default='')
     niveau_licence = serializers.CharField(source='profile.niveau_licence', required=False, default='Licence 1')
+    is_approved = serializers.BooleanField(source='profile.is_approved', read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
     password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'date_joined', 'nom', 'prenom', 'matricule', 'sexe', 'universite', 'faculte', 'departement', 'telephone', 'niveau_licence', 'password')
+        fields = ('id', 'username', 'email', 'date_joined', 'nom', 'prenom', 'matricule', 'sexe', 'universite', 'faculte', 'departement', 'telephone', 'niveau_licence', 'is_approved', 'is_active', 'password')
         read_only_fields = ('username', 'date_joined')
 
     def validate(self, attrs):
@@ -139,6 +141,8 @@ class UserSerializer(serializers.ModelSerializer):
             first_name=prenom,
             last_name=nom
         )
+        user.is_active = False
+        user.save()
 
         StudentProfile.objects.create(
             user=user,
@@ -150,7 +154,8 @@ class UserSerializer(serializers.ModelSerializer):
             faculte=faculte,
             departement=departement,
             telephone=telephone,
-            niveau_licence=niveau_licence
+            niveau_licence=niveau_licence,
+            is_approved=False
         )
         return user
 

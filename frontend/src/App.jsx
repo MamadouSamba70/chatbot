@@ -15,6 +15,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState([]);
   const [seenNotificationIds, setSeenNotificationIds] = useState(new Set());
+  const [firstLoadDone, setFirstLoadDone] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
@@ -36,6 +37,14 @@ export default function App() {
         });
         const notifs = res.data;
         
+        if (!firstLoadDone) {
+          // On first run, mark all current notifications as seen so we don't spam the UI with past history
+          const initialSet = new Set(notifs.map(n => n.id));
+          setSeenNotificationIds(initialSet);
+          setFirstLoadDone(true);
+          return;
+        }
+        
         // Find push notifications that we haven't seen in this session yet
         const newPushNotifs = notifs.filter(n => n.channel === 'push' && !seenNotificationIds.has(n.id));
         
@@ -48,12 +57,6 @@ export default function App() {
             addToast(n);
           });
           setSeenNotificationIds(updatedSeen);
-        } else {
-          // Initialize seen notification list on first run so we don't spam toasts for old history
-          if (seenNotificationIds.size === 0 && notifs.length > 0) {
-            const initialSet = new Set(notifs.map(n => n.id));
-            setSeenNotificationIds(initialSet);
-          }
         }
       } catch (err) {
         console.error("Error checking background notifications:", err);
@@ -64,11 +67,18 @@ export default function App() {
     checkNewNotifications();
     const interval = setInterval(checkNewNotifications, 7000);
     return () => clearInterval(interval);
-  }, [token, seenNotificationIds]);
+  }, [token, seenNotificationIds, firstLoadDone]);
 
   const addToast = (notification) => {
     const id = Date.now() + Math.random();
-    setToasts(prev => [...prev, { id, ...notification }]);
+    setToasts(prev => {
+      const updated = [...prev, { id, ...notification }];
+      // Limit to maximum 2 concurrent toasts on screen to avoid blocking the UI
+      if (updated.length > 2) {
+        return updated.slice(updated.length - 2);
+      }
+      return updated;
+    });
     
     // Auto remove toast after 6 seconds
     setTimeout(() => {
@@ -106,6 +116,7 @@ export default function App() {
     setIsStaff(false);
     setSeenNotificationIds(new Set());
     setToasts([]);
+    setFirstLoadDone(false);
   };
 
   if (loading) {

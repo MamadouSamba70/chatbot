@@ -92,7 +92,7 @@ export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
           password
         });
         
-        setSuccessMsg(`Compte étudiant avec le matricule "${matricule.trim()}" créé avec succès ! Connectez-vous.`);
+        setSuccessMsg(`Compte étudiant créé avec succès ! Votre compte est en attente de validation par l'administrateur avant de pouvoir vous connecter.`);
         setIsLogin(true);
         setLoginMatricule(matricule.trim());
         setLoginPassword('');
@@ -115,7 +115,11 @@ export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
       if (err.response && err.response.data) {
         const data = err.response.data;
         if (data.detail) {
-          setError(data.detail);
+          if (data.detail === "No active account found with the given credentials") {
+            setError("Matricule/Mot de passe incorrect ou compte en attente de validation par l'administrateur.");
+          } else {
+            setError(data.detail);
+          }
         } else {
           const msgs = Object.keys(data).map(k => `${k} : ${Array.isArray(data[k]) ? data[k].join(' ') : data[k]}`);
           setError(msgs.join(' — '));
@@ -156,7 +160,6 @@ export default function Auth({ onLoginSuccess, backendUrl, onBackToLanding }) {
           </button>
           <div className="auth-header" style={{ marginTop: '20px' }}>
             <div className="auth-logos-container">
-              <img src={ugancLogo} alt="Logo UGANC" className="auth-uganc-logo" />
               <img src={centreLogo} alt="Logo Centre Informatique" className="auth-centre-logo" />
             </div>
             <h1>ReminderBot</h1>

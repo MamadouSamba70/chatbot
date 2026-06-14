@@ -31,6 +31,7 @@ class StudentProfile(models.Model):
             ('Licence 4', 'Licence 4')
         ]
     )
+    is_approved = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.prenom} {self.nom} ({self.matricule})"
@@ -42,7 +43,7 @@ class Event(models.Model):
         ('soutenance', 'Soutenance'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='events')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='events', null=True, blank=True)
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
     date = models.DateTimeField()
@@ -51,12 +52,14 @@ class Event(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.title} ({self.get_event_type_display()}) - {self.user.username}"
+        username = self.user.username if self.user else "Tous les étudiants"
+        return f"{self.title} ({self.get_event_type_display()}) - {username}"
 
 class Notification(models.Model):
     CHANNELS = [
         ('email', 'Email'),
         ('push', 'Push'),
+        ('sms', 'SMS'),
     ]
     STATUS_CHOICES = [
         ('pending', 'En attente'),

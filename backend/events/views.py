@@ -26,24 +26,34 @@ class EventViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # If admin, return all events. If student, return only their own.
+        # If admin, return all events. If student, return only their own and global ones.
         if self.request.user.is_staff:
             return Event.objects.all().order_by('date')
-        return Event.objects.filter(user=self.request.user).order_by('date')
+        from django.db.models import Q
+        return Event.objects.filter(Q(user=self.request.user) | Q(user__isnull=True)).order_by('date')
 
     def perform_create(self, serializer):
         # If admin, link the event to the selected student (user_id).
         # Otherwise, link it to the logged-in student.
+        event = None
         if self.request.user.is_staff:
             user_id = self.request.data.get('user_id')
             if user_id:
                 try:
                     target_user = User.objects.get(id=user_id)
-                    serializer.save(user=target_user)
-                    return
+                    event = serializer.save(user=target_user)
                 except User.DoesNotExist:
-                    pass
-        serializer.save(user=self.request.user)
+                    event = serializer.save(user=self.request.user)
+            else:
+                # If admin creates an event without user_id, it is a global event.
+                event = serializer.save(user=None)
+        else:
+            event = serializer.save(user=self.request.user)
+
+        # Trigger immediate SMS notifications for the created event
+        if event:
+            from .notifications_helper import notify_event_creation
+            notify_event_creation(event)
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = NotificationSerializer
@@ -69,6 +79,8 @@ class RegisterFCMTokenView(APIView):
         )
         return Response({"success": "Token FCM enregistré avec succès"}, status=status.HTTP_201_CREATED)
 
+from rest_framework.decorators import action
+
 class StudentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsAdminUser]
     serializer_class = StudentSerializer
@@ -76,6 +88,29 @@ class StudentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # List all users who are students (not staff / superusers) and select profiles in join
         return User.objects.filter(is_staff=False).select_related('profile').order_by('username')
+
+    @action(detail=False, methods=['get'])
+    def pending(self, request):
+        pending_students = self.get_queryset().filter(is_active=False)
+        serializer = self.get_serializer(pending_students, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        student = self.get_object()
+        student.is_active = True
+        student.save()
+        if hasattr(student, 'profile'):
+            student.profile.is_approved = True
+            student.profile.save()
+        return Response({"success": f"L'etudiant {student.username} a ete approuve avec succes."})
+
+    @action(detail=True, methods=['post', 'delete'])
+    def reject(self, request, pk=None):
+        student = self.get_object()
+        username = student.username
+        student.delete()
+        return Response({"success": f"L'etudiant {username} a ete rejete et supprime."})
 
 from .chatbot import process_chatbot_message
 

@@ -104,28 +104,27 @@ CALENDAR_EVENTS = [
 ]
 
 def seed():
-    students = User.objects.filter(is_staff=False)
-    if not students.exists():
-        print("No student accounts found. Seeding skipped. (Run again after registering a student).")
-        return
-        
+    # Clean up student-specific academic calendar events to avoid duplicates
+    titles_to_remove = [ev['title'] for ev in CALENDAR_EVENTS]
+    deleted = Event.objects.filter(user__isnull=False, title__in=titles_to_remove).delete()
+    print(f"Cleaned up {deleted[0]} student-specific academic events to avoid duplicates.")
+
     created_count = 0
-    for student in students:
-        for ev_data in CALENDAR_EVENTS:
-            naive_dt = ev_data['date']
-            aware_dt = timezone.make_aware(naive_dt)
-            exists = Event.objects.filter(user=student, title=ev_data['title'], date=aware_dt).exists()
-            if not exists:
-                Event.objects.create(
-                    user=student,
-                    title=ev_data['title'],
-                    description=ev_data['description'],
-                    date=aware_dt,
-                    event_type=ev_data['event_type']
-                )
-                created_count += 1
+    for ev_data in CALENDAR_EVENTS:
+        naive_dt = ev_data['date']
+        aware_dt = timezone.make_aware(naive_dt)
+        exists = Event.objects.filter(user=None, title=ev_data['title'], date=aware_dt).exists()
+        if not exists:
+            Event.objects.create(
+                user=None, # Global event (visible to all students)
+                title=ev_data['title'],
+                description=ev_data['description'],
+                date=aware_dt,
+                event_type=ev_data['event_type']
+            )
+            created_count += 1
                 
-    print(f"Successfully seeded {created_count} academic calendar events across student accounts.")
+    print(f"Successfully seeded {created_count} global academic calendar events.")
 
 if __name__ == '__main__':
     seed()
